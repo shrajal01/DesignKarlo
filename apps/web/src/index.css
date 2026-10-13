@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #FDFBF7;
+    color: #000000;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  code, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  /* Neo-brutalist reusable button styling */
+  .neo-btn-primary {
+    @apply inline-flex items-center justify-center font-extrabold px-6 py-3 bg-lime text-black border-2 border-black shadow-neo transition-all duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-neo-lg active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .neo-btn-secondary {
+    @apply inline-flex items-center justify-center font-bold px-6 py-3 bg-white text-black border-2 border-black shadow-neo transition-all duration-150 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-neo-lg active:translate-x-0.5 active:translate-y-0.5 active:shadow-none;
+  }
+
+  /* Neo-brutalist cards */
+  .neo-card {
+    @apply bg-white border-2 border-black shadow-neo p-6 transition-all;
+  }
+
+  .neo-badge {
+    @apply inline-flex items-center px-3 py-1 text-xs font-black uppercase tracking-wider border-2 border-black shadow-neo-sm;
+  }
+}
