@@ -10,6 +10,7 @@ import {
   Link as LinkIcon,
   Cpu,
   AlertCircle,
+  AlertTriangle,
   FileText,
 } from 'lucide-react';
 import type {
@@ -47,6 +48,8 @@ export function StructuredEditor({
   const [activeTab, setActiveTab] = useState<'form' | 'json'>('form');
   const [jsonText, setJsonText] = useState(() => JSON.stringify(draft, null, 2));
   const [jsonError, setJsonError] = useState<string | null>(null);
+
+  const [replacementTarget, setReplacementTarget] = useState<'starter' | 'sample' | null>(null);
 
   // Helper to query errors by path
   const getFieldError = (path: string): string | undefined => {
@@ -90,19 +93,63 @@ export function StructuredEditor({
     setActiveTab('form');
   };
 
-  // Helper mutators for Draft
-  const handleLoadSample = () => {
-    if (window.confirm('Load the sample architecture? This will replace your current editor draft.')) {
-      onChangeDraft(JSON.parse(JSON.stringify(problem.sampleSolution)));
-      setJsonText(JSON.stringify(problem.sampleSolution, null, 2));
+  // Helper mutators for Draft & Safe Replacement
+  const isDraftEmpty = (d: StructuredDesign): boolean => {
+    const hasEntities = (d.entities || []).some((e) => e.name && e.name.trim().length > 0);
+    const hasAssumptions = (d.assumptions || []).some((a) => a && a.trim().length > 0);
+    const hasRelationships = (d.relationships || []).length > 0;
+    const hasPatterns = (d.designPatterns || []).length > 0;
+    const hasEdgeCases = (d.edgeCasesConsidered || []).some((ec) => ec && ec.trim().length > 0);
+    return !hasEntities && !hasAssumptions && !hasRelationships && !hasPatterns && !hasEdgeCases;
+  };
+
+  const areDesignsEqual = (a: StructuredDesign, b: StructuredDesign): boolean => {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch {
+      return false;
     }
   };
 
-  const handleLoadStarter = () => {
-    if (window.confirm('Load the starter template? This will replace your current editor draft.')) {
-      onChangeDraft(JSON.parse(JSON.stringify(problem.starterTemplate)));
-      setJsonText(JSON.stringify(problem.starterTemplate, null, 2));
+  const applyReplacement = (target: 'starter' | 'sample') => {
+    const targetDesign = target === 'starter' ? problem.starterTemplate : problem.sampleSolution;
+    const cloned = JSON.parse(JSON.stringify(targetDesign));
+    onChangeDraft(cloned);
+    setJsonText(JSON.stringify(cloned, null, 2));
+    setJsonError(null);
+    setReplacementTarget(null);
+  };
+
+  const handleLoadSample = () => {
+    // If draft is empty, unchanged from initial starter state, or already matches sample solution:
+    // Avoid unnecessary confirmation dialogs
+    const isUnchangedOrEmpty =
+      isDraftEmpty(draft) ||
+      areDesignsEqual(draft, problem.starterTemplate) ||
+      areDesignsEqual(draft, problem.sampleSolution);
+
+    if (isUnchangedOrEmpty) {
+      applyReplacement('sample');
+      return;
     }
+
+    // Current editor contains user-entered modifications -> ask for confirmation
+    setReplacementTarget('sample');
+  };
+
+  const handleLoadStarter = () => {
+    // If draft is empty or already matches starter template:
+    // Avoid unnecessary confirmation dialogs
+    const isUnchangedOrEmpty =
+      isDraftEmpty(draft) || areDesignsEqual(draft, problem.starterTemplate);
+
+    if (isUnchangedOrEmpty) {
+      applyReplacement('starter');
+      return;
+    }
+
+    // Current editor contains user-entered modifications -> ask for confirmation
+    setReplacementTarget('starter');
   };
 
   // 1. Assumptions
@@ -281,25 +328,26 @@ export function StructuredEditor({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Quick Demo Pre-fill Action */}
-          <button
-            type="button"
-            onClick={handleLoadSample}
-            className="neo-badge bg-white hover:bg-neutral-100 text-black border-2 border-black font-bold flex items-center gap-1.5 cursor-pointer py-1.5 px-3"
-            title="Populates a complete, multi-class architecture for quick demonstration"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-lime-accent fill-lime" />
-            Load Sample Architecture
-          </button>
-
+          {/* Starter Template Action */}
           <button
             type="button"
             onClick={handleLoadStarter}
             className="neo-badge bg-white hover:bg-neutral-100 text-black border-2 border-black font-bold flex items-center gap-1.5 cursor-pointer py-1.5 px-3"
-            title="Populates the minimal starting template"
+            title="Populates the minimal, basic starting structure"
           >
             <FileText className="w-3.5 h-3.5 text-neutral-700" />
             Load Starter
+          </button>
+
+          {/* Sample Architecture Action */}
+          <button
+            type="button"
+            onClick={handleLoadSample}
+            className="neo-badge bg-white hover:bg-neutral-100 text-black border-2 border-black font-bold flex items-center gap-1.5 cursor-pointer py-1.5 px-3"
+            title="Populates a complete, illustrative example architecture with allocation and pricing strategies"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-lime-accent fill-lime" />
+            Load Sample Architecture
           </button>
 
           {/* View Mode Toggle */}
@@ -1058,6 +1106,59 @@ export function StructuredEditor({
           )}
         </button>
       </div>
+
+      {/* Draft Replacement Confirmation Modal */}
+      {replacementTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="replacement-dialog-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+        >
+          <div className="bg-white border-4 border-black shadow-neo-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-amber-200 border-2 border-black flex items-center justify-center shadow-neo-sm shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-950" />
+              </div>
+              <div>
+                <span className="neo-badge bg-black text-lime font-black text-[10px] py-0 px-1.5 mb-1 inline-block">
+                  Confirm Replacement
+                </span>
+                <h3 id="replacement-dialog-title" className="text-xl font-black tracking-tight leading-snug">
+                  {replacementTarget === 'starter'
+                    ? 'Load Starter Structure?'
+                    : 'Load Sample Architecture?'}
+                </h3>
+              </div>
+            </div>
+
+            <p className="text-sm font-medium text-neutral-800 leading-relaxed mb-6">
+              {replacementTarget === 'starter'
+                ? 'Your current editor draft contains modified data. Loading the starter will replace your draft with a basic starting structure (minimal entities and core responsibilities, leaving design decisions to you). Any unsaved changes will be lost.'
+                : 'Your current editor draft contains modified data. Loading the sample architecture will replace your draft with a complete example architecture illustrating component separation, allocation, and pricing strategies. Any unsaved changes will be lost.'}
+            </p>
+
+            <div className="flex items-center justify-end gap-3 border-t-2 border-black pt-4">
+              <button
+                type="button"
+                onClick={() => setReplacementTarget(null)}
+                className="neo-btn-secondary py-2 px-4 text-xs font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => applyReplacement(replacementTarget)}
+                className="neo-btn-primary py-2 px-4 text-xs font-black gap-1.5"
+              >
+                {replacementTarget === 'starter'
+                  ? 'Confirm & Load Starter'
+                  : 'Confirm & Load Sample'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

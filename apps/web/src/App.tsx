@@ -20,13 +20,14 @@ import { api, getOrCreateAnonymousUserId, ApiError } from './api/client';
 import { validateStructuredDesign } from './utils/validation';
 import { StorageBanner } from './components/StorageBanner';
 import { ProblemCatalog } from './components/ProblemCatalog';
+import { ProblemBriefing } from './components/ProblemBriefing';
 import { StructuredEditor } from './components/StructuredEditor';
 import { EvaluationView } from './components/EvaluationView';
 import { ComparisonModal } from './components/ComparisonModal';
 import { AttemptHistory } from './components/AttemptHistory';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-type AppView = 'catalog' | 'editor' | 'evaluation';
+type AppView = 'catalog' | 'briefing' | 'editor' | 'evaluation';
 
 export function App() {
   const [anonymousUserId] = useState(() => getOrCreateAnonymousUserId());
@@ -96,6 +97,25 @@ export function App() {
       setSelectedProblem(problem);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to load problem');
+    }
+  };
+
+  const handleStartPracticeSession = async (slug: string) => {
+    setErrorMessage(null);
+    setValidationErrors([]);
+    try {
+      let problem = selectedProblem;
+      if (!problem || problem.slug !== slug) {
+        setLoadingProblems(true);
+        problem = await api.getProblem(slug);
+        setSelectedProblem(problem);
+      }
+      setView('briefing');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to load problem briefing');
+    } finally {
+      setLoadingProblems(false);
     }
   };
 
@@ -328,10 +348,24 @@ export function App() {
               errorMessage={errorMessage}
               onSelectProblem={handleSelectProblem}
               onStartAttempt={handleStartAttempt}
+              onStartPracticeSession={handleStartPracticeSession}
               onRetry={loadInitialData}
               attemptLoading={attemptLoading}
             />
           </>
+        )}
+
+        {/* 2. Problem Briefing View (Guided Practice Session) */}
+        {view === 'briefing' && selectedProblem && (
+          <ProblemBriefing
+            problem={selectedProblem}
+            onBack={() => {
+              setView('catalog');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onStartDesigning={() => handleStartAttempt(selectedProblem.slug)}
+            loading={attemptLoading}
+          />
         )}
 
         {/* 2. Structured Editor View */}

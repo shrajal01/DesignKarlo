@@ -8,6 +8,7 @@ interface ProblemCatalogProps {
   errorMessage?: string | null;
   onSelectProblem: (slug: string) => void;
   onStartAttempt: (slug: string) => void;
+  onStartPracticeSession?: (slug: string) => void;
   onRetry?: () => void;
   attemptLoading: boolean;
 }
@@ -19,6 +20,7 @@ export function ProblemCatalog({
   errorMessage,
   onSelectProblem,
   onStartAttempt,
+  onStartPracticeSession,
   onRetry,
   attemptLoading,
 }: ProblemCatalogProps) {
@@ -118,7 +120,11 @@ export function ProblemCatalog({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onStartAttempt(problem.slug);
+                    if (onStartPracticeSession) {
+                      onStartPracticeSession(problem.slug);
+                    } else {
+                      onStartAttempt(problem.slug);
+                    }
                   }}
                   disabled={attemptLoading}
                   className="neo-btn-primary w-full gap-2 text-sm"
