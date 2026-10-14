@@ -2,6 +2,8 @@
 
 > Low-Level Design (LLD) practice platform with iterative, evidence-based feedback and revision comparison.
 
+Built and designed by [Shrajal Pandey](https://github.com/shrajal01)
+
 DesignKarlo is a full-stack platform engineered to help software engineers, interview candidates, and students practice Low-Level Design problems. It replaces subjective, passive study methods with a structured design workflow: candidates formulate object-oriented solutions using a standardized architectural schema, receive automated, principle-anchored rubric feedback, revise their models, and track tangible architectural improvements across sequential revisions.
 
 ---
