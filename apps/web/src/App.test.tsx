@@ -180,4 +180,107 @@ describe('DesignKarlo Frontend App', () => {
       expect(screen.getByText(/Submit Revision #1 for Evaluation/i)).toBeInTheDocument();
     });
   });
+
+  it('detects MongoDB connected state from /api/health and renders Persistent Mode Active banner', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/api/health')) {
+          return Promise.resolve({
+            ok: true,
+            headers: new Headers({ 'x-persistence-mode': 'mongodb' }),
+            json: () =>
+              Promise.resolve({
+                status: 'ok',
+                service: 'designkarlo-api',
+                environment: 'production',
+                database: 'connected',
+                persistenceMode: 'mongodb',
+              }),
+          });
+        }
+        if (url.includes('/api/problems/parking-lot')) {
+          return Promise.resolve({
+            ok: true,
+            headers: new Headers({ 'x-persistence-mode': 'mongodb' }),
+            json: () => Promise.resolve({ success: true, data: mockProblemDetail, meta: { persistenceMode: 'mongodb' } }),
+          });
+        }
+        if (url.includes('/api/problems')) {
+          return Promise.resolve({
+            ok: true,
+            headers: new Headers({ 'x-persistence-mode': 'mongodb' }),
+            json: () => Promise.resolve({ success: true, data: mockProblems, meta: { persistenceMode: 'mongodb' } }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          headers: new Headers({ 'x-persistence-mode': 'mongodb' }),
+          json: () => Promise.resolve({ success: true, data: {} }),
+        });
+      })
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Persistent Mode Active/i)).toBeInTheDocument();
+      const mongoBadges = screen.getAllByText(/MongoDB/i);
+      expect(mongoBadges.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('renders helpful error notice and retry option when API request fails, without going blank', async () => {
+    let callCount = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/api/problems/parking-lot')) {
+          return Promise.resolve({
+            ok: true,
+            headers: new Headers({ 'x-persistence-mode': 'in-memory' }),
+            json: () => Promise.resolve({ success: true, data: mockProblemDetail }),
+          });
+        }
+        if (url.includes('/api/problems')) {
+          callCount++;
+          if (callCount === 1) {
+            return Promise.resolve({
+              ok: false,
+              status: 503,
+              headers: new Headers(),
+              json: () => Promise.resolve({ error: { message: 'Service Unavailable (Server Waking Up)' } }),
+            });
+          }
+          return Promise.resolve({
+            ok: true,
+            headers: new Headers({ 'x-persistence-mode': 'in-memory' }),
+            json: () => Promise.resolve({ success: true, data: mockProblems }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          headers: new Headers({ 'x-persistence-mode': 'in-memory' }),
+          json: () => Promise.resolve({ status: 'ok', database: 'disconnected (standalone mode)' }),
+        });
+      })
+    );
+
+    render(<App />);
+
+    // Initially shows error and retry option
+    await waitFor(() => {
+      expect(screen.getAllByText(/Service Unavailable/i).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/Unable to Load Curriculum/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Retry/i).length).toBeGreaterThan(0);
+    });
+
+    // Clicking retry attempts to fetch again and succeeds
+    const retryButtons = screen.getAllByText(/Retry/i);
+    fireEvent.click(retryButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Parking Lot System').length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });

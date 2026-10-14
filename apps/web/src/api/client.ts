@@ -40,8 +40,71 @@ export interface ApiResponse<T> {
   };
 }
 
-async function request<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
-  const res = await fetch(url, {
+export interface HealthResponse {
+  status: string;
+  service: string;
+  timestamp: string;
+  uptime: number;
+  environment: string;
+  database: string;
+  persistenceMode?: 'in-memory' | 'mongodb';
+}
+
+/**
+ * Resolves the API base URL based on environment variables and runtime environment.
+ * - If VITE_API_URL is defined, strips any trailing slash.
+ * - In production (PROD mode, e.g. on Netlify), defaults to 'https://designkarlo-api.onrender.com'.
+ * - In development (DEV mode), defaults to '' so requests leverage Vite's dev server proxy (/api -> :5000).
+ */
+export function getApiBaseUrl(): string {
+  const envUrl = (import.meta.env?.VITE_API_URL as string | undefined)?.trim();
+  if (envUrl) {
+    return envUrl.replace(/\/+$/, '');
+  }
+  if (import.meta.env?.PROD) {
+    return 'https://designkarlo-api.onrender.com';
+  }
+  return '';
+}
+
+/**
+ * Builds a fully qualified API endpoint URL ensuring:
+ * 1. Fully-qualified URLs (http:// or https://) are preserved as-is.
+ * 2. Leading slashes are normalized.
+ * 3. The '/api' prefix is included exactly once without duplication.
+ */
+export function buildApiUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
+  const base = getApiBaseUrl();
+  let normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (!normalizedPath.startsWith('/api')) {
+    normalizedPath = `/api${normalizedPath}`;
+  }
+
+  if (!base) {
+    return normalizedPath;
+  }
+
+  const cleanBase = base.replace(/\/api\/?$/, '');
+  return `${cleanBase}${normalizedPath}`;
+}
+
+let currentPersistenceMode: 'in-memory' | 'mongodb' = 'in-memory';
+
+export function getLastPersistenceMode(): 'in-memory' | 'mongodb' {
+  return currentPersistenceMode;
+}
+
+export function setLastPersistenceMode(mode: 'in-memory' | 'mongodb') {
+  currentPersistenceMode = mode;
+}
+
+async function request<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
+  const fullUrl = buildApiUrl(path);
+  const res = await fetch(fullUrl, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -49,9 +112,11 @@ async function request<T>(url: string, options?: RequestInit): Promise<ApiRespon
     },
   });
 
-  const persistenceHeader = (res.headers.get('x-persistence-mode') || 'in-memory') as
-    | 'in-memory'
-    | 'mongodb';
+  const rawHeader =
+    res.headers?.get('x-persistence-mode') ||
+    res.headers?.get('X-Persistence-Mode');
+  const persistenceHeader =
+    rawHeader === 'mongodb' || rawHeader === 'in-memory' ? rawHeader : null;
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -62,14 +127,33 @@ async function request<T>(url: string, options?: RequestInit): Promise<ApiRespon
   if (!body.meta) {
     body.meta = {};
   }
-  if (!body.meta.persistenceMode) {
+  if (persistenceHeader && !body.meta.persistenceMode) {
     body.meta.persistenceMode = persistenceHeader;
+  }
+  if (body.meta.persistenceMode) {
+    currentPersistenceMode = body.meta.persistenceMode;
+  }
+
+  // Handle direct payload responses (such as /api/health which returns fields at root)
+  if (body.data === undefined && (body.status === 'ok' || body.service)) {
+    body.data = body;
   }
 
   return body;
 }
 
 export const api = {
+  async getHealth(): Promise<HealthResponse> {
+    const res = await request<HealthResponse>('/api/health');
+    const health = (res.data || res) as HealthResponse;
+    if (health.persistenceMode) {
+      currentPersistenceMode = health.persistenceMode;
+    } else if (health.database === 'connected') {
+      currentPersistenceMode = 'mongodb';
+    }
+    return health;
+  },
+
   async getProblems(): Promise<ProblemSummary[]> {
     const res = await request<ProblemSummary[]>('/api/problems');
     return res.data;
@@ -93,9 +177,10 @@ export const api = {
 
   async getAttempt(id: string): Promise<{ attempt: Attempt; persistenceMode: 'in-memory' | 'mongodb' }> {
     const res = await request<Attempt>(`/api/attempts/${id}`);
+    const pMode = res.meta?.persistenceMode || currentPersistenceMode;
     return {
       attempt: res.data,
-      persistenceMode: res.meta?.persistenceMode || 'in-memory',
+      persistenceMode: pMode,
     };
   },
 
@@ -111,10 +196,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(design),
     });
+    const pMode = res.meta?.persistenceMode || currentPersistenceMode;
     return {
       submission: res.data,
       isDuplicate: !!res.meta?.isDuplicate,
-      persistenceMode: res.meta?.persistenceMode || 'in-memory',
+      persistenceMode: pMode,
     };
   },
 
@@ -134,11 +220,12 @@ export const api = {
       revisionB: { revisionNumber: number; overallScore?: number; submittedAt: string };
     }>(`/api/attempts/${attemptId}/compare?revA=${revA}&revB=${revB}`);
 
+    const pMode = res.meta?.persistenceMode || currentPersistenceMode;
     return {
       comparison: res.data.comparison,
       revisionA: res.data.revisionA,
       revisionB: res.data.revisionB,
-      persistenceMode: res.meta?.persistenceMode || 'in-memory',
+      persistenceMode: pMode,
     };
   },
 };

@@ -1,12 +1,14 @@
-import { BookOpen, Layers, ArrowRight, ShieldCheck, Clock } from 'lucide-react';
+import { BookOpen, Layers, ArrowRight, ShieldCheck, Clock, AlertTriangle, RotateCcw } from 'lucide-react';
 import type { Problem, ProblemSummary } from '../types';
 
 interface ProblemCatalogProps {
   problems: ProblemSummary[];
   selectedProblem: Problem | null;
   loading: boolean;
+  errorMessage?: string | null;
   onSelectProblem: (slug: string) => void;
   onStartAttempt: (slug: string) => void;
+  onRetry?: () => void;
   attemptLoading: boolean;
 }
 
@@ -14,8 +16,10 @@ export function ProblemCatalog({
   problems,
   selectedProblem,
   loading,
+  errorMessage,
   onSelectProblem,
   onStartAttempt,
+  onRetry,
   attemptLoading,
 }: ProblemCatalogProps) {
   if (loading) {
@@ -23,6 +27,31 @@ export function ProblemCatalog({
       <div className="neo-card p-12 text-center">
         <div className="w-8 h-8 border-4 border-black border-t-lime rounded-full animate-spin mx-auto mb-4" />
         <p className="font-bold text-neutral-700">Loading Low-Level Design curriculum...</p>
+      </div>
+    );
+  }
+
+  if (problems.length === 0) {
+    return (
+      <div className="neo-card p-10 text-center flex flex-col items-center justify-center gap-4 bg-white">
+        <div className="w-12 h-12 bg-amber-100 border-2 border-black rounded-none flex items-center justify-center shadow-neo-sm">
+          <AlertTriangle className="w-6 h-6 text-amber-900" />
+        </div>
+        <div>
+          <h3 className="text-xl font-black mb-1 tracking-tight">Unable to Load Curriculum</h3>
+          <p className="text-neutral-700 text-sm font-medium max-w-md mx-auto leading-relaxed">
+            {errorMessage || 'Could not connect to the DesignKarlo API. The server might be waking up or unreachable.'}
+          </p>
+        </div>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="neo-btn-primary gap-2 text-xs"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Retry Connection
+          </button>
+        )}
       </div>
     );
   }
@@ -136,7 +165,7 @@ export function ProblemCatalog({
                 <Layers className="w-4 h-4" /> Functional Requirements
               </h4>
               <ul className="space-y-2 text-xs font-semibold text-neutral-800 list-disc list-inside">
-                {selectedProblem.functionalRequirements.map((req, idx) => (
+                {(selectedProblem.functionalRequirements || []).map((req, idx) => (
                   <li key={idx} className="leading-relaxed">
                     {req}
                   </li>
@@ -150,7 +179,7 @@ export function ProblemCatalog({
                 <ShieldCheck className="w-4 h-4" /> Architectural & SOLID Constraints
               </h4>
               <ul className="space-y-2 text-xs font-semibold text-neutral-800 list-disc list-inside">
-                {selectedProblem.nonFunctionalConstraints.map((constraint, idx) => (
+                {(selectedProblem.nonFunctionalConstraints || []).map((constraint, idx) => (
                   <li key={idx} className="leading-relaxed">
                     {constraint}
                   </li>

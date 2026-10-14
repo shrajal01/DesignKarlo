@@ -7,11 +7,40 @@ import { notFoundHandler, errorHandler } from './middleware/errorHandler';
 export function createApp(): Application {
   const app = express();
 
-  // Middleware
+  // CORS setup permitting Netlify deployment, preview deploys, and local development
+  const defaultAllowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5000',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'https://designkarlo.netlify.app',
+  ];
+
+  const configuredOrigins = env.CLIENT_URL
+    ? env.CLIENT_URL.split(',').map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean)
+    : [];
+
+  const allowedOriginsSet = new Set([...defaultAllowedOrigins, ...configuredOrigins]);
+
   app.use(
     cors({
-      origin: env.CLIENT_URL,
+      origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. mobile apps, curl, server-side tests)
+        if (!origin) {
+          return callback(null, true);
+        }
+        const cleanOrigin = origin.replace(/\/+$/, '');
+        if (allowedOriginsSet.has(cleanOrigin)) {
+          return callback(null, true);
+        }
+        // Allow Netlify branch/preview deploys (*.netlify.app)
+        if (/^https:\/\/[a-zA-Z0-9_-]+\.netlify\.app$/.test(cleanOrigin)) {
+          return callback(null, true);
+        }
+        return callback(new Error(`Origin "${origin}" not allowed by CORS`));
+      },
       credentials: true,
+      exposedHeaders: ['X-Persistence-Mode', 'x-persistence-mode'],
     })
   );
   app.use(express.json());

@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   User,
   RotateCcw,
+  AlertTriangle,
 } from 'lucide-react';
 import type {
   Problem,
@@ -54,24 +55,38 @@ export function App() {
   } | null>(null);
 
   // Initial load: Fetch problems and system health/persistence
-  useEffect(() => {
-    async function init() {
-      setLoadingProblems(true);
-      try {
-        const problemList = await api.getProblems();
-        setProblems(problemList);
+  const loadInitialData = async () => {
+    setLoadingProblems(true);
+    setErrorMessage(null);
+    try {
+      const [healthRes, problemList] = await Promise.all([
+        api.getHealth().catch((err) => {
+          console.warn('[DesignKarlo] Health check failed:', err);
+          return null;
+        }),
+        api.getProblems(),
+      ]);
 
-        if (problemList.length > 0) {
-          const defaultProblem = await api.getProblem(problemList[0].slug);
-          setSelectedProblem(defaultProblem);
-        }
-      } catch (err: unknown) {
-        setErrorMessage(err instanceof Error ? err.message : 'Failed to connect to DesignKarlo API');
-      } finally {
-        setLoadingProblems(false);
+      if (healthRes) {
+        const isMongo = healthRes.persistenceMode === 'mongodb' || healthRes.database === 'connected';
+        setPersistenceMode(isMongo ? 'mongodb' : 'in-memory');
       }
+
+      setProblems(problemList);
+
+      if (problemList.length > 0) {
+        const defaultProblem = await api.getProblem(problemList[0].slug);
+        setSelectedProblem(defaultProblem);
+      }
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to connect to DesignKarlo API');
+    } finally {
+      setLoadingProblems(false);
     }
-    init();
+  };
+
+  useEffect(() => {
+    loadInitialData();
   }, []);
 
   const handleSelectProblem = async (slug: string) => {
@@ -264,17 +279,29 @@ export function App() {
         {/* Ephemeral In-Memory Warning Banner */}
         <StorageBanner persistenceMode={persistenceMode} />
 
-        {/* Global Error Notice */}
+        {/* Global Error Notice with Retry Option */}
         {errorMessage && (
-          <div className="bg-red-100 border-2 border-black p-4 text-red-950 font-bold text-xs flex items-center justify-between shadow-neo-sm">
-            <span>{errorMessage}</span>
-            <button
-              type="button"
-              onClick={() => setErrorMessage(null)}
-              className="neo-badge bg-white text-black text-[10px]"
-            >
-              Dismiss
-            </button>
+          <div className="bg-red-100 border-2 border-black p-4 text-red-950 font-bold text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-neo-sm">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-700 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={loadInitialData}
+                className="neo-badge bg-lime text-black text-[10px] flex items-center gap-1 cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3" /> Retry Connection
+              </button>
+              <button
+                type="button"
+                onClick={() => setErrorMessage(null)}
+                className="neo-badge bg-white text-black text-[10px] cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
         )}
 
@@ -298,8 +325,10 @@ export function App() {
               problems={problems}
               selectedProblem={selectedProblem}
               loading={loadingProblems}
+              errorMessage={errorMessage}
               onSelectProblem={handleSelectProblem}
               onStartAttempt={handleStartAttempt}
+              onRetry={loadInitialData}
               attemptLoading={attemptLoading}
             />
           </>
