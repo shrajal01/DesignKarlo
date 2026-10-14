@@ -5,7 +5,20 @@ import type {
   Submission,
   StructuredDesign,
   ComparisonSummary,
+  ValidationErrorDetail,
 } from '../types';
+
+export class ApiError extends Error {
+  code?: string;
+  details?: ValidationErrorDetail[];
+
+  constructor(message: string, code?: string, details?: ValidationErrorDetail[]) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.details = details;
+  }
+}
 
 export function getOrCreateAnonymousUserId(): string {
   const STORAGE_KEY = 'dk_anonymous_user_id';
@@ -40,10 +53,10 @@ async function request<T>(url: string, options?: RequestInit): Promise<ApiRespon
     | 'in-memory'
     | 'mongodb';
 
-  const body = await res.json();
+  const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const message = body.error?.message || `Request failed with status ${res.status}`;
-    throw new Error(message);
+    throw new ApiError(message, body.error?.code, body.error?.details);
   }
 
   if (!body.meta) {

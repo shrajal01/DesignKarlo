@@ -29,6 +29,11 @@ export interface DesignPatternUsage {
   justification: string;
 }
 
+export interface ValidationErrorDetail {
+  path: string;
+  message: string;
+}
+
 export interface StructuredDesign {
   problemSlug: string;
   assumptions: string[];

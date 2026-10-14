@@ -13,14 +13,17 @@ import type {
   Submission,
   StructuredDesign,
   ComparisonSummary,
+  ValidationErrorDetail,
 } from './types';
-import { api, getOrCreateAnonymousUserId } from './api/client';
+import { api, getOrCreateAnonymousUserId, ApiError } from './api/client';
+import { validateStructuredDesign } from './utils/validation';
 import { StorageBanner } from './components/StorageBanner';
 import { ProblemCatalog } from './components/ProblemCatalog';
 import { StructuredEditor } from './components/StructuredEditor';
 import { EvaluationView } from './components/EvaluationView';
 import { ComparisonModal } from './components/ComparisonModal';
 import { AttemptHistory } from './components/AttemptHistory';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 type AppView = 'catalog' | 'editor' | 'evaluation';
 
@@ -40,6 +43,7 @@ export function App() {
   const [attemptLoading, setAttemptLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrorDetail[]>([]);
 
   // Comparison Modal state
   const [isCompareOpen, setIsCompareOpen] = useState(false);
@@ -72,6 +76,7 @@ export function App() {
 
   const handleSelectProblem = async (slug: string) => {
     try {
+      setValidationErrors([]);
       const problem = await api.getProblem(slug);
       setSelectedProblem(problem);
     } catch (err: unknown) {
@@ -82,6 +87,7 @@ export function App() {
   const handleStartAttempt = async (slug: string) => {
     setAttemptLoading(true);
     setErrorMessage(null);
+    setValidationErrors([]);
     try {
       const problem = await api.getProblem(slug);
       setSelectedProblem(problem);
@@ -109,11 +115,41 @@ export function App() {
     }
   };
 
+  const handleChangeDraft = (newDraft: StructuredDesign) => {
+    setEditorDraft(newDraft);
+    // If validation errors are currently displayed, revalidate live so errors clear as the user fixes them
+    if (validationErrors.length > 0) {
+      const nextErrors = validateStructuredDesign(newDraft);
+      setValidationErrors(nextErrors);
+      if (nextErrors.length === 0) {
+        setErrorMessage(null);
+      }
+    }
+  };
+
   const handleSubmitDesign = async () => {
     if (!activeAttempt || !editorDraft) return;
 
+    // 1. Run client-side validation first for instant actionable feedback
+    const clientErrors = validateStructuredDesign(editorDraft);
+    if (clientErrors.length > 0) {
+      setValidationErrors(clientErrors);
+      setErrorMessage(
+        `Submission has ${clientErrors.length} validation ${
+          clientErrors.length === 1 ? 'error' : 'errors'
+        }. Fix the highlighted fields below.`
+      );
+      const summaryEl = document.getElementById('validation-summary-box');
+      if (summaryEl) {
+        summaryEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage(null);
+    setValidationErrors([]);
+
     try {
       const { submission, persistenceMode: pMode } = await api.submitDesign(
         activeAttempt.id,
@@ -130,7 +166,20 @@ export function App() {
       setView('evaluation');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Submission evaluation failed');
+      if (err instanceof ApiError && err.details && err.details.length > 0) {
+        setValidationErrors(err.details);
+        setErrorMessage(
+          `Submission has ${err.details.length} validation ${
+            err.details.length === 1 ? 'error' : 'errors'
+          }. Fix the highlighted fields below.`
+        );
+        const summaryEl = document.getElementById('validation-summary-box');
+        if (summaryEl) {
+          summaryEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } else {
+        setErrorMessage(err instanceof Error ? err.message : 'Submission evaluation failed');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -138,6 +187,8 @@ export function App() {
 
   const handleRevise = () => {
     if (!activeSubmission) return;
+    setValidationErrors([]);
+    setErrorMessage(null);
     // Clone previous submission design into editor draft
     setEditorDraft(JSON.parse(JSON.stringify(activeSubmission.design)));
     setView('editor');
@@ -285,14 +336,24 @@ export function App() {
               )}
             </div>
 
-            <StructuredEditor
-              problem={selectedProblem}
-              draft={editorDraft}
-              onChangeDraft={setEditorDraft}
-              onSubmit={handleSubmitDesign}
-              isSubmitting={isSubmitting}
-              revisionNumber={(activeAttempt?.currentRevisionNumber || 0) + 1}
-            />
+            <ErrorBoundary
+              fallbackTitle="Design Studio Error"
+              onReset={() => {
+                if (selectedProblem) {
+                  setEditorDraft(JSON.parse(JSON.stringify(selectedProblem.starterTemplate)));
+                }
+              }}
+            >
+              <StructuredEditor
+                problem={selectedProblem}
+                draft={editorDraft}
+                onChangeDraft={handleChangeDraft}
+                onSubmit={handleSubmitDesign}
+                isSubmitting={isSubmitting}
+                revisionNumber={(activeAttempt?.currentRevisionNumber || 0) + 1}
+                validationErrors={validationErrors}
+              />
+            </ErrorBoundary>
           </div>
         )}
 
@@ -368,7 +429,7 @@ export function App() {
             <span>Low-Level Design Practice & Progression Platform</span>
           </div>
           <div>
-            Built with React, Vite, Express, TypeScript & Tailwind CSS • Neo-Brutalist Engineering
+            CipherSchools
           </div>
         </div>
       </footer>

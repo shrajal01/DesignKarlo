@@ -7,7 +7,8 @@ async function bootstrap() {
 
   // Attempt database connection in the background; does not block server startup
   connectDB().catch((err) => {
-    console.warn('[MongoDB] Initial connection attempt error:', err.message);
+    const safeMsg = (err?.message || String(err)).replace(/:([^:@/\s]+)@/g, ':****@');
+    console.warn('[MongoDB] Initial connection attempt error:', safeMsg);
   });
 
   const server = app.listen(env.PORT, () => {

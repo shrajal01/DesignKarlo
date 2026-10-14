@@ -1,8 +1,30 @@
+import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-// Load environment variables from .env if present
-dotenv.config();
+// Resolve possible .env paths across repository root and workspace
+const rootEnvPath = path.resolve(__dirname, '../../../../.env');
+const rootEnvLocalPath = path.resolve(__dirname, '../../../../.env.local');
+const appEnvPath = path.resolve(__dirname, '../../.env');
+const appEnvLocalPath = path.resolve(__dirname, '../../.env.local');
+const cwdEnvPath = path.resolve(process.cwd(), '.env');
+
+// Prioritize root .env files so workspace commands (e.g. npm run dev / dev:api)
+// load repository-level configuration reliably.
+const envFilesToLoad = [
+  rootEnvLocalPath,
+  rootEnvPath,
+  appEnvLocalPath,
+  appEnvPath,
+  cwdEnvPath,
+];
+
+for (const envFile of envFilesToLoad) {
+  if (fs.existsSync(envFile)) {
+    dotenv.config({ path: envFile });
+  }
+}
 
 const envSchema = z.object({
   PORT: z
@@ -15,8 +37,10 @@ const envSchema = z.object({
   API_PREFIX: z.string().default('/api'),
   CLIENT_URL: z.string().default('http://localhost:5173'),
   MONGODB_URI: z
-    .string()
-    .default('mongodb://localhost:27017/designkarlo'),
+    .preprocess(
+      (val) => (typeof val === 'string' && val.trim() === '' ? undefined : typeof val === 'string' ? val.trim() : val),
+      z.string().default('mongodb://localhost:27017/designkarlo')
+    ),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

@@ -21,7 +21,7 @@ export const EntityDefinitionSchema = z.object({
     .min(2, 'Entity name must be at least 2 characters')
     .regex(
       /^[A-Za-z][A-Za-z0-9_]*$/,
-      'Entity name must start with a letter and contain only alphanumeric characters or underscores'
+      'Entity name must start with a letter and contain only alphanumeric characters or underscores (no spaces or parentheses; select "interface" from the type dropdown instead)'
     ),
   type: EntityTypeEnum,
   responsibilities: z

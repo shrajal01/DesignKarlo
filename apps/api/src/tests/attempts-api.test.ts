@@ -142,7 +142,7 @@ describe('Problems & Attempts API Endpoints', () => {
       expect(detailsRes.body.data.submissions).toHaveLength(2);
     });
 
-    it('rejects invalid submission schema with 400', async () => {
+    it('rejects invalid submission schema with 400 and returns structured details without incrementing revision', async () => {
       const attemptRes = await request(app).post('/api/attempts').send({
         problemSlug: 'parking-lot',
         anonymousUserId: 'anon_test',
@@ -159,6 +159,91 @@ describe('Problems & Attempts API Endpoints', () => {
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(Array.isArray(res.body.error.details)).toBe(true);
+      expect(res.body.error.details.length).toBeGreaterThan(0);
+      expect(res.body.error.details[0]).toHaveProperty('path');
+      expect(res.body.error.details[0]).toHaveProperty('message');
+
+      // Verify that revision was NOT incremented
+      const attemptDetails = await request(app).get(`/api/attempts/${attemptId}`);
+      expect(attemptDetails.body.data.currentRevisionNumber).toBe(0);
+      expect(attemptDetails.body.data.submissions).toHaveLength(0);
+    });
+
+    it('rejects Revision #4 payload with actionable entity name error details and accepts when fixed', async () => {
+      const attemptRes = await request(app).post('/api/attempts').send({
+        problemSlug: 'parking-lot',
+        anonymousUserId: 'anon_rev4_tester',
+      });
+      const attemptId = attemptRes.body.data.id;
+
+      const failingRevision4 = {
+        problemSlug: 'parking-lot',
+        assumptions: ['Multi-floor parking facility with separate entry and exit gates.'],
+        entities: [
+          {
+            name: 'ParkingLot',
+            type: 'class',
+            responsibilities: ['Coordinates workflow'],
+            attributes: [],
+            methods: [],
+          },
+          {
+            name: 'SpotAllocationStrategy (INTERFACE)',
+            type: 'class',
+            responsibilities: ['Defines spot selection'],
+            attributes: [],
+            methods: [],
+          },
+        ],
+        relationships: [],
+        designPatterns: [],
+        edgeCasesConsidered: ['Full lot condition handled gracefully'],
+      };
+
+      // 1. Failing attempt
+      const failRes = await request(app)
+        .post(`/api/attempts/${attemptId}/submissions`)
+        .send(failingRevision4);
+
+      expect(failRes.status).toBe(400);
+      expect(failRes.body.error.code).toBe('VALIDATION_ERROR');
+      const errorPaths = failRes.body.error.details.map((d: { path: string }) => d.path);
+      expect(errorPaths).toContain('entities.1.name');
+      const entity1Error = failRes.body.error.details.find(
+        (d: { path: string }) => d.path === 'entities.1.name'
+      );
+      expect(entity1Error.message).toContain('no spaces or parentheses');
+
+      // Revision is still 0
+      const checkAttempt = await request(app).get(`/api/attempts/${attemptId}`);
+      expect(checkAttempt.body.data.currentRevisionNumber).toBe(0);
+
+      // 2. Fixed payload succeeds
+      const fixedRevision4 = {
+        ...failingRevision4,
+        entities: [
+          failingRevision4.entities[0],
+          {
+            ...failingRevision4.entities[1],
+            name: 'SpotAllocationStrategy',
+            type: 'interface',
+          },
+        ],
+      };
+
+      const successRes = await request(app)
+        .post(`/api/attempts/${attemptId}/submissions`)
+        .send(fixedRevision4);
+
+      expect(successRes.status).toBe(201);
+      expect(successRes.body.success).toBe(true);
+      expect(successRes.body.data.revisionNumber).toBe(1);
+
+      // Revision is now 1
+      const updatedAttempt = await request(app).get(`/api/attempts/${attemptId}`);
+      expect(updatedAttempt.body.data.currentRevisionNumber).toBe(1);
+      expect(updatedAttempt.body.data.submissions).toHaveLength(1);
     });
   });
 });
