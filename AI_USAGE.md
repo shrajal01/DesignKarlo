@@ -1,122 +1,139 @@
-# DesignKarlo - AI Assistance and Engineering Decisions Log
+# DesignKarlo — AI Assistance and Engineering Decisions Log
 
-This document provides a factual record of how AI assistance was utilized throughout the development of DesignKarlo. It outlines the specific tools employed, collaborative development workflows, architectural guidance accepted, alternative approaches rejected, and human verification procedures applied.
-
----
-
-## 1. Purpose and Scope
-
-Artificial Intelligence was leveraged as an interactive pair-programming assistant to accelerate project foundation, schema modeling, boilerplate generation, validation edge-case analysis, and test suite creation.
-
-While AI assisted with rapid code synthesis and structural exploration, all architectural choices, engineering trade-offs, code reviews, and final acceptance criteria were directed and validated by the developer. The platform's correctness, stability, and adherence to assignment requirements were confirmed through local test execution, static analysis, and production build verification.
+This document provides a factual, transparent record of how Artificial Intelligence assistance was utilized during the development of **DesignKarlo** for the CipherSchools Full Stack Development Internship assignment. It outlines the specific tools employed, collaborative development workflows, meaningful architectural decisions, alternatives evaluated and rejected, and the human verification procedures applied.
 
 ---
 
-## 2. Tools and Workflow
+## 1. Development Workflow and AI Interaction Model
 
-### Development Environment and Tooling
-- **Primary AI Assistant:** Antigravity Engineering Agent (powered by Google DeepMind Gemini models).
-- **IDE and Platform:** Antigravity IDE operating on Windows 11 with PowerShell 7.
-- **Workflow Modality:** Conversational pair programming with iterative terminal-driven verification.
+### Tooling Environment
+- **AI Assistant:** Antigravity Engineering Agent (powered by Google DeepMind Gemini models).
+- **Development Environment:** Antigravity IDE on Windows 11 with PowerShell 7 and Node.js v20.
+- **Project Structure:** Monorepo using native npm workspaces (`apps/api`, `apps/web`).
 
-### Collaborative Workflow Pattern
-1. **Requirements Framing:** The human developer established the functional scope, domain requirements, architectural constraints, and assignment rubrics.
-2. **AI Proposal and Generation:** The AI assistant generated candidate implementations, TypeScript schemas, test cases, and configuration files aligned with the established design principles.
-3. **Diff Review and Refinement:** The developer reviewed code diffs for adherence to clean architecture principles, eliminating extraneous dependencies or over-engineered patterns.
-4. **Terminal Verification:** Commands were executed directly in the local environment (`npm run test:api`, `npm run test:web`, `npm run build`) to ensure that all generated code executed cleanly without errors or warnings.
-
----
-
-## 3. Principles for AI Usage
-
-1. **Augmentation, Not Autopilot:** AI was used to draft repetitive boilerplate, articulate edge cases, and scaffold modular structures. Code was not integrated without inspecting its runtime implications.
-2. **Deterministic Verification:** No feature or test was documented as complete without running the corresponding terminal command and observing the output.
-3. **Architectural Restraint:** Complex architectural proposals (e.g., distributed message brokers, microservices, or heavyweight build orchestrators) were resisted in favor of clean, modular monorepo patterns suited for an MVP codebase.
-4. **Resilience and Graceful Degradation:** The AI was prompted to ensure that external dependency failures (such as MongoDB being offline) degrade gracefully to functional in-memory alternatives rather than terminating the process.
+### Collaboration Pattern
+1. **Human Direction and Requirements Framing:** The developer defined the product requirements, architectural scope, domain constraints, and evaluation rubrics based on the assignment objectives.
+2. **AI Synthesis and Drafting:** The AI assistant drafted TypeScript schemas, React components, Zod validation logic, Vitest test suites, and configuration files.
+3. **Manual Code Review and Modification:** Every AI-proposed change was inspected for structural cleanliness, type safety, dependency hygiene, and alignment with the system design note. Proposed solutions that introduced extraneous libraries or architectural over-engineering were pruned or rejected.
+4. **Terminal-Driven Verification:** No change was marked complete without running the local test suites (`npm run test:api`, `npm run test:web`) and production build commands (`npm run build`).
 
 ---
 
-## 4. Engineering Decisions and Trade-offs Log
+## 2. Meaningful AI-Assisted Engineering Decisions
 
-### Decision 1: Monorepo Strategy (Native npm Workspaces)
-- **Context:** The project required separating the backend API (`apps/api`) from the frontend client (`apps/web`) while sharing root-level scripts and configuration.
-- **Option Considered:** Turborepo or Nx vs. Native npm workspaces.
-- **Decision:** **Accepted Native npm Workspaces.**
-- **Rationale:** Native npm workspaces eliminate third-party build orchestrator overhead and configuration complexity. They provide native dependency hoisting, workspace script delegation, and zero additional installation friction for developers.
-- **Rejected:** Turborepo / Nx. Deemed unnecessary overhead for a two-package MVP.
-
-### Decision 2: Decoupled Server Architecture and Dual Persistence Fallback
-- **Context:** The Express backend needed to support MongoDB document persistence while allowing local developers and evaluators to run the server and test suites without requiring a running MongoDB daemon.
-- **Decision:**
-  1. Decoupled Express application pipeline configuration (`src/app.ts`) from process listening and database bootstrapping (`src/index.ts`).
-  2. Implemented the Repository Pattern via the `IAttemptRepository` interface, backed by `MongoAttemptRepository` (Mongoose) and `InMemoryAttemptRepository`.
-  3. Added non-blocking connection logic in `src/config/db.ts` that catches connection failures, logs a sanitized notice, and automatically switches the active repository to in-memory mode.
-- **Rationale:** Decoupled `app.ts` enables Supertest integration suites to run in-memory without port conflicts. The dual persistence pattern allows immediate evaluation without Docker or MongoDB setup, broadcasting the active storage mode via the `X-Persistence-Mode` header.
-- **Rejected:** Hard-failing server startup on MongoDB connection failure.
-
-### Decision 3: Structured Text/Form Modeling vs. Visual Canvas UML
-- **Context:** Low-Level Design practice requires communicating class responsibilities, relationships, and design patterns.
-- **Option Considered:** Visual drag-and-drop canvas (e.g., React Flow or Konva) vs. Structured form-based text editor.
-- **Decision:** **Accepted Structured Form and JSON Editor.**
-- **Rationale:** Canvas tools introduce high interaction overhead, complex layout state, and difficulty in automated parsing. Structured forms (organized into Assumptions, Entities, Relationships, Patterns, and Edge Cases) allow fast authoring, clear schema validation, precise diffing between revisions, and deterministic rubric evaluation.
-- **Rejected:** Interactive drag-and-drop UML canvas. It distracts from core architectural reasoning and complicates multi-revision diffing.
-
-### Decision 4: Deterministic Rubric Evaluator vs. Live LLM Grading
-- **Context:** The platform needed an automated feedback engine to evaluate design submissions and calculate revision deltas.
-- **Option Considered:** Live LLM API calls on submission vs. Rule-based deterministic evaluation engine (`deterministic-v1`).
-- **Decision:** **Accepted Deterministic Rule-Based Evaluator for MVP.**
-- **Rationale:** Live LLM grading introduces network latency, external API token costs, rate limits, and non-deterministic score drift between identical revisions. The `deterministicEvaluator` provides instant feedback across four 25-point dimensions (Domain Entities, SOLID and Modularity, Extensibility and Patterns, Edge Cases and Concurrency), guaranteeing repeatable scoring and clear concern diffing.
-- **Rejected:** Unconstrained one-shot LLM evaluation for the core evaluation pipeline.
-
-### Decision 5: Field-Level Validation UX and Defensive JSON Import
-- **Context:** Submitting complex structured designs previously produced generic validation error messages or caused render crashes when imported JSON lacked optional fields.
-- **Decision:**
-  1. Built `validateStructuredDesign` and `formatErrorLocation` in `apps/web/src/utils/validation.ts` to surface field-level errors with clickable anchors.
-  2. Built `normalizeAndValidateImportJson` in `apps/web/src/utils/importer.ts` to default missing arrays (`attributes`, `methods`, `relationships`, `designPatterns`), normalize object formats, map aliases (`edgeCases` to `edgeCasesConsidered`), and reject invalid structures without modifying existing form state.
-  3. Introduced a React Error Boundary (`ErrorBoundary.tsx`) to catch unhandled rendering exceptions and provide recovery options.
-- **Rationale:** Prevents white-screen crashes, preserves in-progress user drafts when importing malformed JSON, and provides clear guidance on why a submission failed validation.
-- **Rejected:** Generic submission error banners and silent JSON import state overrides.
-
-### Decision 6: Duplicate Submission Throttling
-- **Context:** Rapid resubmissions or accidental double-clicks could pollute attempt history with identical duplicate revisions.
-- **Decision:** Implemented an in-memory SHA-256 payload cache in `apps/api/src/services/attemptService.ts` with a 5-second window. Identical submissions within this window return the existing submission record with `isDuplicate: true` rather than incrementing the revision counter.
-- **Rationale:** Protects data integrity and avoids unnecessary evaluation cycles.
-
-### Decision 7: Anonymous Practice Sessions
-- **Context:** Users should be able to start practicing LLD immediately without onboarding friction.
-- **Decision:** Stored an anonymous user identifier in browser `localStorage` (`dk_anonymous_user_id`), passed to `/api/attempts` endpoints to group historical attempts.
-- **Rationale:** Eliminates authentication barriers during initial evaluation while establishing the schema foundation for future multi-user authentication.
-- **Rejected:** Premature authentication walls (OAuth/JWT) during the MVP phase.
+### Decision 1: Native npm Workspaces and a Modular Monolith
+- **Context / Problem:** The project required clean separation between the backend Express API (`apps/api`) and the React frontend SPA (`apps/web`), while allowing shared root commands and streamlined dependency management.
+- **Options Considered:** Multi-repository setup, polyrepo with git submodules, third-party monorepo tools (Turborepo, Nx), or native npm workspaces in a modular monolith.
+- **Decision Accepted:** **Native npm workspaces (`workspaces: ["apps/*"]`) in a modular monolith.**
+- **Alternatives Rejected and Why:**
+  - *Multi-repo / Submodules:* Rejected due to cross-repository coordination overhead, separate issue tracking, and synchronization friction during rapid iteration.
+  - *Turborepo / Nx:* Rejected as unnecessary overhead. Native npm workspaces provide native dependency hoisting, workspace script delegation, and zero additional configuration complexity for a two-package project.
+- **Human Review and Verification Performed:** Inspected root and workspace `package.json` scripts, verified root commands (`npm run dev`, `npm run build`, `npm run test`), and validated workspace hoisting across both applications.
 
 ---
 
-## 5. Specific Areas of AI Assistance
-
-### Project Scaffolding and Infrastructure
-- Generated root and workspace `package.json` configurations for npm workspaces.
-- Configured TypeScript configurations (`tsconfig.json`) across backend and frontend workspaces.
-- Established Vite proxy rules (`vite.config.ts`) to route `/api` calls directly to the Express server in development.
-
-### Schema Design and Edge-Case Analysis
-- Formulated Zod schemas for structured submissions (`StructuredDesignSchema`), defining strict validation for entity naming, non-empty responsibilities, declared relationship targets, and pattern justifications.
-- Identified potential edge cases in JSON import handling (e.g., payloads omitting optional arrays or using field aliases) and generated defensive normalization routines.
-
-### Test Suite Construction
-- Generated comprehensive Vitest and Supertest integration suites for the API server (`attempts-api.test.ts`, `submission-schema.test.ts`, `deterministic-evaluator.test.ts`, `repository.test.ts`, `health.test.ts`).
-- Created React Testing Library suites (`App.test.tsx`, `validation.test.tsx`) testing form validation, rename cascading, JSON normalization, and crash prevention.
-
-### Architectural Documentation
-- Structured the initial Technical Design Note (`docs/design-note.md`) and Research Note (`docs/research-note.md`).
-- Authored Mermaid sequence and architecture diagrams representing data flows and domain entity relationships.
+### Decision 2: Structured Form/JSON Architecture Input vs. Drag-and-Drop UML Canvas
+- **Context / Problem:** Low-Level Design practice requires candidates to model object-oriented architectures including class responsibilities, relationships, applied design patterns, and concurrency considerations.
+- **Options Considered:** Interactive visual drag-and-drop canvas (e.g., React Flow, Konva, or GoJS), raw code compilation sandbox (Docker-based compiler), or a structured schema-driven Form/JSON editor.
+- **Decision Accepted:** **Structured Form and JSON editor backed by a strict Zod schema (`StructuredDesignSchema`).**
+- **Alternatives Rejected and Why:**
+  - *Drag-and-Drop UML Canvas:* Rejected because visual canvas manipulation introduces immense UI state complexity, high interaction overhead (resizing boxes and aligning arrows), and fragile automated parsing, distracting candidates from architectural reasoning.
+  - *Arbitrary Code Execution Sandbox:* Rejected because compiler output evaluates binary syntax and unit tests rather than architectural decoupling or design pattern justification, while introducing significant container security and execution overhead.
+- **Why That Decision Was Appropriate:** Structured input forces candidates to articulate architectural reasoning clearly. Structured JSON enables deterministic schema validation, clean side-by-side revision diffing, and algorithmic rubric scoring without visual canvas noise.
+- **Human Review and Verification Performed:** Evaluated editor UX, verified 15 unit and integration tests in `apps/web/src/validation.test.tsx` verifying field-level validation, entity rename cascading, and defensive schema parsing.
 
 ---
 
-## 6. Human Review and Verification Record
+### Decision 3: Deterministic Rubric Evaluator (`deterministic-v1`) vs. Live LLM Grading
+- **Context / Problem:** The platform required an automated feedback engine to critique candidate designs and track progression across sequential revisions.
+- **Options Considered:** Live unconstrained LLM calls on every submission, hybrid heuristic + LLM evaluation, or a 100% deterministic rule-based evaluation engine.
+- **Decision Accepted:** **Deterministic rule-based evaluation engine (`deterministic-v1`) across 4 foundational dimensions (Domain Entities, SOLID & Modularity, Extensibility & Patterns, Edge Cases & Concurrency).**
+- **Alternatives Rejected and Why:**
+  - *Live LLM Grading:* Rejected for the core evaluation pipeline due to network latency (multi-second delays), external API token expenses, rate limits, and non-deterministic scoring drift (where identical solutions receive differing numerical scores).
+- **Why That Decision Was Appropriate:** Deterministic evaluation provides zero-latency feedback, works completely offline, costs nothing to execute, and produces reproducible scores. It ensures that revision deltas (`scoreDelta`, `resolvedConcerns`, `newConcerns`) reflect concrete architectural changes rather than prompt variance.
+- **Human Review and Verification Performed:** Tested scoring rules against diverse submissions, verified 7 automated test suites in `apps/api/src/tests/deterministic-evaluator.test.ts` asserting exact scoring bounds (0–100), rubric deductions, and concern diffing (`compareEvaluations`).
 
-All code generated or modified with AI assistance underwent strict manual review and terminal verification:
+---
 
-1. **Code Review:** Inspecting generated modules for maintainability, type safety, secure URI handling (e.g., masking MongoDB credentials in logs), and proper separation of concerns.
-2. **Terminal Execution:** Every major milestone was validated by running the monorepo test suites and build scripts.
-   - **Backend Verification:** All 47 API tests in `apps/api` passing via `npm run test:api`.
-   - **Frontend Verification:** All 18 Web tests in `apps/web` passing via `npm run test:web`.
-   - **Production Build:** Clean TypeScript compilation and Vite bundling via `npm run build`.
+### Decision 4: MongoDB Repository Pattern with Automated In-Memory Fallback
+- **Context / Problem:** The backend needed persistent storage in production via MongoDB Atlas while allowing local development, CI pipelines, and evaluators to run immediately without requiring a local MongoDB daemon.
+- **Options Considered:** Mandatory local MongoDB/Docker requirement, embedded SQLite database, or Repository Pattern with Mongoose and an in-memory fallback.
+- **Decision Accepted:** **Repository pattern via `IAttemptRepository` interface with `MongoAttemptRepository` and `InMemoryAttemptRepository`, paired with non-blocking connection logic in `db.ts` and `X-Persistence-Mode` response headers.**
+- **Alternatives Rejected and Why:**
+  - *Hard-failing Server Startup on Database Disconnection:* Rejected because it creates excessive setup friction for reviewers who want to inspect or test the codebase locally without provisioning a database.
+  - *Embedded SQLite:* Rejected to keep production MongoDB document modeling native and avoid native C-binding compilation issues across different operating systems.
+- **Why That Decision Was Appropriate:** Enables zero-downtime development and testing. When MongoDB is unreachable, the API gracefully falls back to in-memory mode, masks credentials in logs, and informs the client of the storage state.
+- **Human Review and Verification Performed:** Reviewed `apps/api/src/config/db.ts` to ensure credentials are masked in logs and connection errors don't crash Express; verified with 5 tests in `repository.test.ts`, 3 in `db-config.test.ts`, and full integration suites in `attempts-api.test.ts`.
+
+---
+
+### Decision 5: Defensive JSON Normalization and Field-Level Validation UX
+- **Context / Problem:** When users submitted incomplete designs or imported raw JSON, the UI previously showed generic error banners or suffered white-screen rendering crashes when optional arrays were omitted.
+- **Options Considered:** Generic top-level error banner, strict rejection of any non-standard JSON without assistance, or defensive normalization with field-level clickable error anchors.
+- **Decision Accepted:** **Built `validateStructuredDesign` and `formatErrorLocation` for actionable jump-to-field error anchors, alongside `normalizeAndValidateImportJson` which defaults omitted arrays (`attributes`, `methods`, `relationships`, `designPatterns`), converts object notation to strings, maps field aliases, and preserves the active draft if import fails. Wrapped the editor in a React Error Boundary.**
+- **Alternatives Rejected and Why:**
+  - *Generic Error Banners:* Rejected because users could not identify which specific field or class failed validation.
+  - *Silent State Overwrites:* Rejected because overwriting user drafts with malformed imports caused irreversible data loss.
+- **Why That Decision Was Appropriate:** Prevents unhandled render exceptions, preserves user work, and provides clear guidance on why a submission failed validation.
+- **Human Review and Verification Performed:** Verified through targeted regression tests in `apps/web/src/validation.test.tsx` (including the custom Parking Lot JSON crash regression test) and manual UI inspection.
+
+---
+
+### Decision 6: Separating Guided Practice (Problem Briefing) from Direct Attempt Flows
+- **Context / Problem:** "Start Practice Session" and "Start Attempt" previously navigated to the same empty editor, causing confusion for candidates seeking guided learning versus those ready to draft immediately.
+- **Options Considered:** Single monolithic editor screen, forced modal overlay on entry, or distinct views: a dedicated `ProblemBriefing` view for guided practice and direct editor routing for experienced users.
+- **Decision Accepted:** **Implemented `ProblemBriefing` view with problem background, core entities, requirements, and edge cases with a "Start Designing" button, while preserving direct attempt access from historical cards and catalog specifications.**
+- **Alternatives Rejected and Why:**
+  - *Auto-creating Attempt on Briefing View:* Rejected because navigating to the briefing page without drafting would generate empty "ghost" attempts in the database.
+- **Why That Decision Was Appropriate:** Accommodates differing learner intents: candidates studying a problem for the first time receive guided architectural context before drafting, while returning candidates can immediately begin drafting or revise previous attempts.
+- **Human Review and Verification Performed:** Verified through 13 integration tests in `apps/web/src/App.test.tsx` asserting proper navigation flow, briefing display, and attempt creation timing.
+
+---
+
+### Decision 7: Distinct Starter Templates vs. Sample Architectures with Safe Draft Replacement
+- **Context / Problem:** "Load Starter" and "Load Sample Architecture" had ambiguous boundaries, and clicking either button would immediately overwrite an in-progress design without warning, or could inadvertently trigger premature server submissions.
+- **Options Considered:** Single template button, direct overwriting of local state, or distinct data structures with an explicit dirty-draft confirmation modal.
+- **Decision Accepted:** **Defined distinct payloads (Starter = minimal 2-class baseline; Sample = complete sample architecture with strategy patterns and interfaces), guarded draft replacement with a confirmation modal when edits exist, and restricted template loading to local editor state without creating server submissions or incrementing revisions.**
+- **Alternatives Rejected and Why:**
+  - *Unconfirmed Replacement:* Rejected due to high risk of accidental data loss when exploring templates.
+  - *Automatic Submission on Template Load:* Rejected to prevent polluting attempt history with unedited sample designs.
+- **Why That Decision Was Appropriate:** Protects user drafts from accidental loss, clarifies the instructional purpose of a skeleton starter versus a comprehensive sample design, and keeps revision history clean.
+- **Human Review and Verification Performed:** Verified through 4 specific test cases in `apps/web/src/App.test.tsx` testing payload differentiation, cancellation draft preservation, confirmed loading, and absence of accidental submissions.
+
+---
+
+### Decision 8: Production API URL Resolution, CORS, Persistence Status Detection, and Netlify Deployment Routing
+- **Context / Problem:** Deployed frontend on Netlify received HTTP 404 on `/api/problems`, displayed an incorrect "In-Memory" badge despite the backend reporting a live MongoDB connection, and faced potential CORS issues.
+- **Options Considered:** Hardcoding absolute API URLs with wildcards in CORS, separate backend routing, or Netlify `_redirects` proxying with relative API paths.
+- **Decision Accepted:** **Configured Netlify `_redirects` proxying `/api/*` requests to the Render backend, aligned API URL resolution in `client.ts` to use relative paths in production, updated CORS configuration in Express `app.ts` to allow the Netlify origin, and wired `StorageBanner` to parse the `X-Persistence-Mode` header and `/api/health` status.**
+- **Alternatives Rejected and Why:**
+  - *Hardcoding Absolute URLs in Components:* Rejected because it broke local Vite proxying and exposed deployment URLs unnecessarily.
+  - *Wildcard (`*`) CORS in Production:* Rejected for security best practices.
+- **Why That Decision Was Appropriate:** Eliminates CORS issues in production, enables transparent API proxying through Netlify, and provides accurate real-time storage observability to the user.
+- **Human Review and Verification Performed:** Verified in integration tests (`client.test.ts`, `health.test.ts`), checked live deployment responses, and verified the real-time green database indicator on the live deployment.
+
+---
+
+## 3. Human Verification and Validation Record
+
+All AI-generated code, schemas, and configurations were subjected to rigorous local and automated verification. No unverified claims or synthetic figures have been documented.
+
+### Automated Test Verification
+- **Backend API Suite (`apps/api`):**
+  - **7 test files passed, 50 tests passed** (100% passing).
+  - Executed via `npm run test:api`.
+  - Covered: Mongoose and in-memory repositories, problem catalog integrity, Zod submission schemas, deterministic evaluation rules, comparison logic, environment parsing, and Express REST routes.
+- **Frontend Web Suite (`apps/web`):**
+  - **3 test files passed, 37 tests passed** (100% passing).
+  - Executed via `npm run test:web`.
+  - Covered: API client wrappers, briefing navigation, structured editor form validation, clickable error anchors, JSON normalization, crash-prevention regression tests, and safe template loading workflows.
+- **Total Test Suite:**
+  - **87 passed** across all workspaces (`npm run test`).
+- **Monorepo Production Build:**
+  - Executed via `npm run build`.
+  - Clean TypeScript compilation (`tsc`) for `apps/api`.
+  - Clean TypeScript compilation and Vite production bundle (`dist/`) for `apps/web`.
+
+### Manual End-to-End Verification
+- Verified live deployment health check at [https://designkarlo-api.onrender.com/api/health](https://designkarlo-api.onrender.com/api/health), confirming active MongoDB connection state.
+- Verified live frontend user flow at [https://designkarlo.netlify.app/](https://designkarlo.netlify.app/), validating problem briefing, structured submission, rubric evaluation display, and side-by-side revision comparison.

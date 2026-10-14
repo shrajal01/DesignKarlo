@@ -421,9 +421,11 @@ npm run build
 
 ## Deployment
 
-The application is structured for standard cloud deployment (e.g., Render, Railway, Vercel, or AWS ECS).
+Live Application: [https://designkarlo.netlify.app/](https://designkarlo.netlify.app/)
+Backend API: [https://designkarlo-api.onrender.com/](https://designkarlo-api.onrender.com/)
+API Health Check: [https://designkarlo-api.onrender.com/api/health](https://designkarlo-api.onrender.com/api/health)
 
-The live deployment URL will be added here once deployment to public hosting infrastructure is executed.
+The frontend is deployed on Netlify, and the backend API is deployed on Render. The API health endpoint can be used to verify backend availability and database connectivity.
 
 ---
 
